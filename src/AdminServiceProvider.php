@@ -2,9 +2,12 @@
 
 namespace Encore\Admin;
 
+use Encore\Admin\Layout\Content;
+use Illuminate\Routing\Router;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\ServiceProvider;
+use Illuminate\Support\Str;
 
 class AdminServiceProvider extends ServiceProvider
 {
@@ -14,6 +17,7 @@ class AdminServiceProvider extends ServiceProvider
     protected $commands = [
         Console\AdminCommand::class,
         Console\MakeCommand::class,
+        Console\ControllerCommand::class,
         Console\MenuCommand::class,
         Console\InstallCommand::class,
         Console\PublishCommand::class,
@@ -27,6 +31,8 @@ class AdminServiceProvider extends ServiceProvider
         Console\FormCommand::class,
         Console\PermissionCommand::class,
         Console\ActionCommand::class,
+        Console\GenerateMenuCommand::class,
+        Console\ConfigCommand::class,
     ];
 
     /**
@@ -55,7 +61,7 @@ class AdminServiceProvider extends ServiceProvider
             'admin.log',
             'admin.bootstrap',
             'admin.permission',
-//            'admin.session',
+            //            'admin.session',
         ],
     ];
 
@@ -77,6 +83,14 @@ class AdminServiceProvider extends ServiceProvider
         $this->registerPublishing();
 
         $this->compatibleBlade();
+
+        Blade::directive('box', function ($title) {
+            return "<?php \$box = new \Encore\Admin\Widgets\Box({$title}, '";
+        });
+
+        Blade::directive('endbox', function ($expression) {
+            return "'); echo \$box->render(); ?>";
+        });
     }
 
     /**
@@ -86,7 +100,8 @@ class AdminServiceProvider extends ServiceProvider
      */
     protected function ensureHttps()
     {
-        if (config('admin.https') || config('admin.secure')) {
+        $is_admin = Str::startsWith(request()->getRequestUri(), '/'.ltrim(config('admin.route.prefix'), '/'));
+        if ((config('admin.https') || config('admin.secure')) && $is_admin) {
             url()->forceScheme('https');
             $this->app['request']->server->set('HTTPS', true);
         }
@@ -101,7 +116,11 @@ class AdminServiceProvider extends ServiceProvider
     {
         if ($this->app->runningInConsole()) {
             $this->publishes([__DIR__.'/../config' => config_path()], 'laravel-admin-config');
-            $this->publishes([__DIR__.'/../resources/lang' => resource_path('lang')], 'laravel-admin-lang');
+            if (version_compare($this->app->version(), '9.0.0', '>=')) {
+                $this->publishes([__DIR__.'/../resources/lang' => base_path('lang')], 'laravel-admin-lang');
+            } else {
+                $this->publishes([__DIR__.'/../resources/lang' => resource_path('lang')], 'laravel-admin-lang');
+            }
             $this->publishes([__DIR__.'/../database/migrations' => database_path('migrations')], 'laravel-admin-migrations');
             $this->publishes([__DIR__.'/../resources/assets' => public_path('vendor/laravel-admin')], 'laravel-admin-assets');
         }
@@ -122,6 +141,30 @@ class AdminServiceProvider extends ServiceProvider
     }
 
     /**
+     * Extends laravel router.
+     */
+    protected function macroRouter()
+    {
+        Router::macro('content', function ($uri, $content, $options = []) {
+            return $this->match(['GET', 'HEAD'], $uri, function (Content $layout) use ($content, $options) {
+                return $layout
+                    ->title(Arr::get($options, 'title', ' '))
+                    ->description(Arr::get($options, 'desc', ' '))
+                    ->body($content);
+            });
+        });
+
+        Router::macro('component', function ($uri, $component, $data = [], $options = []) {
+            return $this->match(['GET', 'HEAD'], $uri, function (Content $layout) use ($component, $data, $options) {
+                return $layout
+                    ->title(Arr::get($options, 'title', ' '))
+                    ->description(Arr::get($options, 'desc', ' '))
+                    ->component($component, $data);
+            });
+        });
+    }
+
+    /**
      * Register the service provider.
      *
      * @return void
@@ -133,6 +176,8 @@ class AdminServiceProvider extends ServiceProvider
         $this->registerRouteMiddleware();
 
         $this->commands($this->commands);
+
+        $this->macroRouter();
     }
 
     /**

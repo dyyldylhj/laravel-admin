@@ -11,6 +11,8 @@ use Illuminate\Support\Str;
 
 class Select extends Field
 {
+    use CanCascadeFields;
+
     /**
      * @var array
      */
@@ -34,6 +36,11 @@ class Select extends Field
      * @var array
      */
     protected $config = [];
+
+    /**
+     * @var string
+     */
+    protected $cascadeEvent = 'change';
 
     /**
      * Set options.
@@ -136,7 +143,11 @@ $(document).on('change', "{$this->getElementClassSelector()}", function () {
                 d.text = d.$textField;
                 return d;
             })
-        }).trigger('change');
+        });
+        if (target.data('value')) {
+            $(target).val(target.data('value'));
+        }
+        $(target).trigger('change');
     });
 });
 EOT;
@@ -177,7 +188,7 @@ var refreshOptions = function(url, target) {
         target.find("option").remove();
         $(target).select2({
             placeholder: $placeholder,
-            allowClear: $strAllowClear,        
+            allowClear: $strAllowClear,
             data: $.map(data, function (d) {
                 d.id = d.$idField;
                 d.text = d.$textField;
@@ -283,7 +294,7 @@ $.ajax($ajaxOptions).done(function(data) {
       var value = $(element).data('value') + '';
       if (value) {
         value = value.split(',');
-        $(element).select2('val', value);
+        $(element).val(value).trigger("change");
       }
   });
 });
@@ -386,7 +397,7 @@ $("form select").on("select2:opening", function (e) {
 $(document).ready(function(){
     $('select').each(function(){
         if($(this).is('[readonly]')){
-            $(this).closest('.form-group').find('span.select2-selection__choice__remove').first().remove();
+            $(this).closest('.form-group').find('span.select2-selection__choice__remove').remove();
             $(this).closest('.form-group').find('li.select2-search').first().remove();
             $(this).closest('.form-group').find('span.select2-selection__clear').first().remove();
         }
@@ -431,6 +442,8 @@ EOT;
             'options' => $this->options,
             'groups'  => $this->groups,
         ]);
+
+        $this->addCascadeScript();
 
         $this->attribute('data-value', implode(',', (array) $this->value()));
 

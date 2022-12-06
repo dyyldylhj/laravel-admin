@@ -3,6 +3,7 @@
 namespace Encore\Admin\Console;
 
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Hash;
 
 class ResetPasswordCommand extends Command
 {
@@ -27,14 +28,10 @@ class ResetPasswordCommand extends Command
     {
         $userModel = config('admin.database.users_model');
 
-        $users = $userModel::all();
-
         askForUserName:
-        $username = $this->askWithCompletion('Please enter a username who needs to reset his password', $users->pluck('username')->toArray());
+        $username = $this->ask('Please enter a username who needs to reset his password');
 
-        $user = $users->first(function ($user) use ($username) {
-            return $user->username == $username;
-        });
+        $user = $userModel::query()->where('username', $username)->first();
 
         if (is_null($user)) {
             $this->error('The user you entered is not exists');
@@ -49,7 +46,7 @@ class ResetPasswordCommand extends Command
             goto enterPassword;
         }
 
-        $user->password = bcrypt($password);
+        $user->password = Hash::make($password);
 
         $user->save();
 

@@ -6,6 +6,7 @@ use Encore\Admin\Admin;
 use Encore\Admin\Form;
 use Encore\Admin\Form\Field;
 use Encore\Admin\Form\NestedForm;
+use Encore\Admin\Widgets\Form as WidgetForm;
 use Illuminate\Database\Eloquent\Relations\HasMany as Relation;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Support\Arr;
@@ -110,6 +111,13 @@ class HasMany extends Field
         }
 
         $input = Arr::only($input, $this->column);
+
+        /** unset item that contains remove flag */
+        foreach ($input[$this->column] as $key => $value) {
+            if ($value[NestedForm::REMOVE_FLAG_NAME]) {
+                unset($input[$this->column][$key]);
+            }
+        }
 
         $form = $this->buildNestedForm($this->column, $this->builder);
 
@@ -322,7 +330,11 @@ class HasMany extends Field
     {
         $form = new Form\NestedForm($column, $model);
 
-        $form->setForm($this->form);
+        if ($this->form instanceof WidgetForm) {
+            $form->setWidgetForm($this->form);
+        } else {
+            $form->setForm($this->form);
+        }
 
         call_user_func($builder, $form);
 
@@ -490,6 +502,7 @@ $('#has-many-{$this->column}').off('click', '.add').on('click', '.add', function
 });
 
 $('#has-many-{$this->column}').off('click', '.remove').on('click', '.remove', function () {
+    $(this).closest('.has-many-{$this->column}-form').find('input').removeAttr('required');
     $(this).closest('.has-many-{$this->column}-form').hide();
     $(this).closest('.has-many-{$this->column}-form').find('.$removeClass').val(1);
     return false;
@@ -546,7 +559,7 @@ if ($('.has-error').length) {
         var tabId = '#'+$(this).attr('id');
         $('li a[href="'+tabId+'"] i').removeClass('hide');
     });
-    
+
     var first = $('.has-error:first').parent().attr('id');
     $('li a[href="#'+first+'"]').tab('show');
 }
@@ -589,8 +602,14 @@ $('#has-many-{$this->column}').on('click', '.add', function () {
 });
 
 $('#has-many-{$this->column}').on('click', '.remove', function () {
-    $(this).closest('.has-many-{$this->column}-form').hide();
-    $(this).closest('.has-many-{$this->column}-form').find('.$removeClass').val(1);
+    var first_input_name = $(this).closest('.has-many-{$this->column}-form').find('input[name]:first').attr('name');
+    if (first_input_name.match('{$this->column}\\\[new_')) {
+        $(this).closest('.has-many-{$this->column}-form').remove();
+    } else {
+        $(this).closest('.has-many-{$this->column}-form').hide();
+        $(this).closest('.has-many-{$this->column}-form').find('.$removeClass').val(1);
+        $(this).closest('.has-many-{$this->column}-form').find('input').removeAttr('required');
+    }
     return false;
 });
 
@@ -632,6 +651,10 @@ EOT;
      */
     public function render()
     {
+        if (!$this->shouldRender()) {
+            return '';
+        }
+
         if ($this->viewMode == 'table') {
             return $this->renderTable();
         }
@@ -644,7 +667,7 @@ EOT;
 
         $this->setupScript($script);
 
-        return parent::render()->with([
+        return parent::fieldRender([
             'forms'        => $this->buildRelatedForms(),
             'template'     => $template,
             'relationName' => $this->relationName,
@@ -701,7 +724,7 @@ EOT;
         // specify a view to render.
         $this->view = $this->views[$this->viewMode];
 
-        return parent::render()->with([
+        return parent::fieldRender([
             'headers'      => $headers,
             'forms'        => $this->buildRelatedForms(),
             'template'     => $template,

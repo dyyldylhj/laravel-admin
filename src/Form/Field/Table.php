@@ -3,6 +3,7 @@
 namespace Encore\Admin\Form\Field;
 
 use Encore\Admin\Form\NestedForm;
+use Encore\Admin\Widgets\Form as WidgetForm;
 
 class Table extends HasMany
 {
@@ -51,11 +52,13 @@ class Table extends HasMany
                 $forms[$key] = $this->buildNestedForm($this->column, $this->builder, $key)->fill($data);
             }
         } else {
-            foreach ($this->value as $key => $data) {
+            foreach ($this->value ?? [] as $key => $data) {
                 if (isset($data['pivot'])) {
                     $data = array_merge($data, $data['pivot']);
                 }
-                $forms[$key] = $this->buildNestedForm($this->column, $this->builder, $key)->fill($data);
+                if (is_array($data)) {
+                    $forms[$key] = $this->buildNestedForm($this->column, $this->builder, $key)->fill($data);
+                }
             }
         }
 
@@ -90,8 +93,13 @@ class Table extends HasMany
     {
         $form = new NestedForm($column);
 
-        $form->setForm($this->form)
-            ->setKey($key);
+        if ($this->form instanceof WidgetForm) {
+            $form->setWidgetForm($this->form);
+        } else {
+            $form->setForm($this->form);
+        }
+
+        $form->setKey($key);
 
         call_user_func($builder, $form);
 
